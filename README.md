@@ -1,8 +1,6 @@
-# AI-Powered PDF Chatbot
+# AI-POWERED PDF CHATBOT | Planned Project
 
 A planned AI assistant for asking questions across PDF documents and receiving contextual answers with page-level citations.
-
-> **Status: Planned Project** — This repository currently contains project documentation only. The application, source code, setup instructions, and demo will be added as development progresses.
 
 ## Overview
 
@@ -10,9 +8,9 @@ The project aims to use Retrieval-Augmented Generation (RAG) to turn PDF documen
 
 ## Planned Features
 
-- **Document-grounded Q&A:** Query multiple PDFs with contextual answers and page-level citations.
-- **PDF processing and retrieval:** Extract text from digital and scanned PDFs using OCR, semantic chunking, embeddings, and vector search.
-- **Conversational interface:** Build a React interface and FastAPI backend with secure document uploads and conversation history for follow-up questions.
+- Build a RAG-based chatbot for querying multiple PDFs with contextual answers and page-level citations.
+- Implement OCR, semantic chunking, and vector search to retrieve relevant information from scanned and text-based PDFs.
+- Develop a FastAPI backend and React interface with secure document uploads and conversational memory.
 
 ## Proposed Technology Stack
 
