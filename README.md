@@ -1,4 +1,4 @@
-# AI-POWERED PDF CHATBOT | Planned Project
+# AI-POWERED PDF CHATBOT 
 
 A planned AI assistant for asking questions across PDF documents and receiving contextual answers with page-level citations.
 
