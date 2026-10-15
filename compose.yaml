@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: pdfchat
+      POSTGRES_USER: pdfchat
+      POSTGRES_PASSWORD: pdfchat
+    ports:
+      - "5432:5432"
+    volumes:
+      - pdfchat_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pdfchat -d pdfchat"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pdfchat_postgres:

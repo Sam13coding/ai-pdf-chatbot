@@ -1,0 +1,36 @@
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Frontend dependencies and build output
+node_modules/
+dist/
+.npm-cache/
+
+# Uploaded documents, databases, and local tools
+/data/
+/.tools/
+*.db
+*.db-shm
+*.db-wal
+.logs/
+*.log
+
+# Presentation exports and scratch files
+/.ppt_work/
+/output/
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
