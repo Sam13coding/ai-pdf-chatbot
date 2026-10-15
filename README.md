@@ -1,52 +1,151 @@
-# AI-POWERED PDF CHATBOT 
+# PAGESUTRA - AN AI POWERED CHATBOT
 
-A planned AI assistant for asking questions across PDF documents and receiving contextual answers with page-level citations.
+Ask questions across your PDFs and follow the citations back to the source page.
+PAGESUTRA uses a React frontend, a FastAPI backend, and NVIDIA models for embeddings
+and answers. It supports text PDFs and scanned pages through Tesseract OCR.
 
-## Overview
+## Running locally
 
-The project aims to use Retrieval-Augmented Generation (RAG) to turn PDF documents into a searchable knowledge base. Users will be able to upload documents, ask questions in natural language, and trace answers back to the relevant pages.
+You need Python 3.11+, Node.js 20+, and an API key from [NVIDIA Build](https://build.nvidia.com/).
+The default database configuration also needs Docker with Compose.
 
-## Planned Features
+Start PostgreSQL from the repository root:
 
-- Build a RAG-based chatbot for querying multiple PDFs with contextual answers and page-level citations.
-- Implement OCR, semantic chunking, and vector search to retrieve relevant information from scanned and text-based PDFs.
-- Develop a FastAPI backend and React interface with secure document uploads and conversational memory.
+```sh
+docker compose up -d postgres
+```
 
-## Proposed Technology Stack
+Set up the API in PowerShell:
 
-| Component | Technology |
+```powershell
+cd backend
+Copy-Item .env.example .env
+py -3 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+# Set NVIDIA_API_KEY in .env before starting the API.
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8001
+```
+
+On macOS or Linux, use `cp .env.example .env`, `python3 -m venv .venv`,
+and `source .venv/bin/activate` for the equivalent setup.
+
+In another terminal, start the frontend:
+
+```sh
+cd frontend
+npm ci
+npm run dev
+```
+
+Open <http://127.0.0.1:5173>, create an account, and upload a PDF.
+The API docs are at <http://127.0.0.1:8001/docs>. Vite forwards `/api` requests
+to that port. On Windows, use `npm.cmd` if PowerShell blocks `npm.ps1`.
+
+For a simpler setup without Docker, leave `DATABASE_URL=` empty in `backend/.env`.
+That uses SQLite and ranks vectors in Python. PostgreSQL uses pgvector for retrieval.
+Uploaded files remain in `data/uploads/` with either database.
+
+## Configuration
+
+Copy `backend/.env.example` and adjust the values you need. Restart the API after changes.
+
+| Setting | Purpose |
 | --- | --- |
-| Frontend | React |
-| Backend | Python, FastAPI |
-| RAG orchestration | LangChain |
-| Language model and embeddings | OpenAI API |
-| Database and vector search | PostgreSQL with pgvector |
-| PDF text extraction | PyMuPDF |
-| OCR for scanned PDFs | Tesseract |
+| `NVIDIA_API_KEY` | Required for uploads and answers |
+| `NVIDIA_CHAT_MODEL`, `NVIDIA_EMBEDDING_MODEL` | Model identifiers for the NVIDIA endpoint |
+| `EMBEDDING_DIMENSIONS` | PostgreSQL vector size; must match the embedding model |
+| `DATABASE_URL` | PostgreSQL connection string, or empty for SQLite |
+| `DATA_DIR` | Storage directory, relative to the project root unless absolute |
+| `MAX_PDF_MB` | Upload limit per PDF; defaults to 20 MB |
+| `OCR_ENABLED` | Enable OCR for image-bearing pages with little text |
+| `TESSDATA_PREFIX` | Directory containing `eng.traineddata`; absolute or relative to `backend/` |
+| `FRONTEND_ORIGIN` | Allowed origin for direct browser requests to the API |
+| `COOKIE_SECURE` | Set to `true` when serving over HTTPS |
 
-Technology choices may change during implementation.
+To read scanned PDFs, install Tesseract language data and point `TESSDATA_PREFIX`
+to its `tessdata` directory. Set `OCR_ENABLED=false` if you only need text PDFs.
+If you change the embedding model, delete and upload existing PDFs again: vectors
+from different models are incompatible.
 
-## Proposed Workflow
+The Compose database credentials are for local development. Document text and
+questions are sent to the configured NVIDIA API. Accounts use salted scrypt
+password hashes and HttpOnly session cookies; documents and chats belong to the
+signed-in account.
 
-1. Upload and validate PDF documents.
-2. Extract text, using OCR when needed, while preserving page references.
-3. Split text into semantic chunks, generate embeddings, and store them with document metadata.
-4. Retrieve relevant chunks for each question.
-5. Generate an answer grounded in the retrieved content and display its page citations.
-6. Use conversation history to support follow-up questions.
+## Repository layout
 
-## Development Roadmap
+```text
+backend/
+  app/
+    main.py         # API routes and request handling
+    auth.py         # Accounts and cookie sessions
+    config.py       # Environment settings and storage paths
+    db.py           # SQLite and PostgreSQL storage
+    pdf.py          # Extraction, OCR, links, and page-aware chunks
+    rag.py          # Embeddings, retrieval, and answer generation
+  tests/
+  .env.example
+  migrate_sqlite_to_postgres.py
+  requirements.txt
+  requirements-dev.txt
+frontend/
+  src/
+    components/     # Sign-in form, document library, and citations
+    api.js          # Shared HTTP client
+    App.jsx         # Workspace, document library, and chat
+    main.jsx        # React entry point
+    styles.css
+compose.yaml
+```
 
-- [ ] Create the FastAPI backend and React frontend.
-- [ ] Add PDF uploads, text extraction, and OCR support.
-- [ ] Implement chunking, embeddings, and vector retrieval.
-- [ ] Add document-grounded answers and page-level citations.
-- [ ] Add conversation history and multi-document support.
-- [ ] Implement authentication and per-user document access.
-- [ ] Explore hybrid search and reranking to improve retrieval relevance.
-- [ ] Evaluate retrieval quality, answer groundedness, and response latency.
-- [ ] Publish setup instructions, screenshots, and a working demo.
+Local credentials, uploaded documents, databases, build output, presentation exports,
+and scratch tools are excluded through `.gitignore`.
 
-## Getting Started
+## How retrieval works
 
-The application is not yet implemented. Installation and usage instructions will be added with the first working version.
+PyMuPDF extracts each page's text and external link annotations. Image-bearing pages
+with fewer than 40 text characters use OCR when enabled. The text is split into
+chunks of up to 1,200 characters with overlap, keeping each chunk on its source page.
+
+The backend embeds those chunks with NVIDIA. For each question it retrieves the
+six closest chunks by cosine similarity, then passes those excerpts and recent
+conversation history to the chat model through LangChain. Answers include numbered
+references that open the original PDF page.
+
+Citations are generated by the model and can be wrong. OCR also depends on scan
+quality. Uploads run within the request, so large scanned files can take a while;
+there is no background job queue or upload progress yet.
+
+## Development
+
+Run the API tests from `backend/`:
+
+```sh
+pip install -r requirements-dev.txt
+python -m unittest discover -s tests -p "test_*.py" -v
+```
+
+The tests use temporary SQLite databases and mock the NVIDIA calls. They cover
+accounts, document ownership, PDF extraction, uploads, citations, and deletion.
+The OCR test skips when local Tesseract language data is unavailable.
+
+Check the frontend from `frontend/`:
+
+```sh
+npm run format:check
+npm run build
+```
+
+Use `npm run format` to format frontend source files.
+
+For a live integration check, start the API with PostgreSQL and NVIDIA access,
+create a test account, set `SMOKE_TEST_EMAIL` and `SMOKE_TEST_PASSWORD`, then run
+`python tests/live_postgres_smoke.py` from `backend/`. It uploads a synthetic PDF,
+checks a cited answer, and removes the document and chat afterwards. This calls
+the external API. Override `API_BASE_URL` if the API runs elsewhere.
+
+If moving an existing SQLite installation to PostgreSQL, back up `data/`, set
+`DATABASE_URL`, and run `python migrate_sqlite_to_postgres.py` from `backend/`.
+Keep the uploaded PDF files alongside the migrated database. On older installations
+with unowned records, the first account created receives those records.
