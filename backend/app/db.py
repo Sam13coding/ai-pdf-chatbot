@@ -75,6 +75,7 @@ def init_db():
             db.execute("ALTER TABLE conversations ADD COLUMN IF NOT EXISTS owner_id TEXT REFERENCES users(id)")
             db.execute("CREATE INDEX IF NOT EXISTS idx_documents_owner ON documents(owner_id)")
             db.execute("CREATE INDEX IF NOT EXISTS idx_conversations_owner ON conversations(owner_id)")
+            init_workflow_tables(db)
         return
 
     with connection() as db:
@@ -122,6 +123,22 @@ def init_db():
             db.execute("ALTER TABLE conversations ADD COLUMN owner_id TEXT REFERENCES users(id)")
         db.execute("CREATE INDEX IF NOT EXISTS idx_documents_owner ON documents(owner_id)")
         db.execute("CREATE INDEX IF NOT EXISTS idx_conversations_owner ON conversations(owner_id)")
+        init_workflow_tables(db)
+
+
+def init_workflow_tables(db):
+    db.execute("""CREATE TABLE IF NOT EXISTS workflows (
+        id TEXT PRIMARY KEY, owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL, goal TEXT NOT NULL, document_ids TEXT NOT NULL,
+        status TEXT NOT NULL, created_at TEXT NOT NULL, lease_until DOUBLE PRECISION NOT NULL DEFAULT 0,
+        run_token TEXT, error TEXT
+    )""")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_workflows_owner ON workflows(owner_id)")
+    db.execute("""CREATE TABLE IF NOT EXISTS reports (
+        id TEXT PRIMARY KEY REFERENCES workflows(id) ON DELETE CASCADE,
+        owner_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        content TEXT NOT NULL, created_at TEXT NOT NULL
+    )""")
 
 
 @contextmanager

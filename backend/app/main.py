@@ -1,10 +1,12 @@
 import hashlib
 import json
 import logging
+import time
 import uuid
 from contextlib import asynccontextmanager
+from typing import Literal
 
-from fastapi import Cookie, Depends, FastAPI, File, HTTPException, Response, UploadFile
+from fastapi import Cookie, Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from openai import APIStatusError
@@ -14,7 +16,9 @@ from .config import EMBEDDING_MODEL, FRONTEND_ORIGIN, MAX_PDF_BYTES, UPLOAD_DIR
 from .auth import Credentials, current_user, login, logout, register
 from .db import connection, init_db
 from .pdf import chunk_pages, extract_pages
-from .rag import MissingNvidiaKeyError, answer_question, embeddings, retrieve
+from .rag import MissingNvidiaKeyError, answer_question, answer_with_background, embeddings, retrieve, standalone_question
+from .chat_graph import run_chat
+from .workflows import router as workflow_router
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +42,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="PAGESUTRA API", lifespan=lifespan)
+app.include_router(workflow_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[FRONTEND_ORIGIN],
@@ -47,10 +52,32 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def monitor_request(request: Request, call_next):
+    request_id = str(uuid.uuid4())
+    started = time.perf_counter()
+    status_code = 500
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        response.headers["X-Request-ID"] = request_id
+        return response
+    finally:
+        route = request.scope.get("route")
+        # Route templates avoid recording IDs, query strings, bodies or credentials.
+        logging.getLogger("uvicorn.error").info(json.dumps({
+            "event": "http_request", "request_id": request_id,
+            "method": request.method, "route": getattr(route, "path", "unmatched"),
+            "status": status_code,
+            "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+        }))
+
+
 class ChatRequest(BaseModel):
     question: str = Field(min_length=2, max_length=2000)
     conversation_id: str | None = None
     document_ids: list[str] = Field(default_factory=list, max_length=50)
+    answer_mode: Literal["documents", "background"] = "documents"
 
 
 @app.get("/api/health")
@@ -221,10 +248,8 @@ def chat(request: ChatRequest, user: dict = Depends(current_user)):
                 (request.conversation_id,),
             )][::-1]
     try:
-        previous_question = next((item["content"] for item in reversed(history) if item["role"] == "user"), "")
-        search_query = f"{previous_question[:300]} {question}" if previous_question else question
-        sources = retrieve(search_query, request.document_ids, user["id"])
-        answer, citations = answer_question(question, history, sources)
+        answer_fn = answer_with_background if request.answer_mode == "background" else answer_question
+        answer, citations = run_chat(question, history, request.document_ids, user["id"], retrieve, answer_fn, standalone_question)
     except MissingNvidiaKeyError as exc:
         raise HTTPException(503, str(exc)) from exc
     except ValueError as exc:
