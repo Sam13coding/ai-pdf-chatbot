@@ -28,6 +28,8 @@ def main():
         chunks = rows(source, "SELECT * FROM chunks")
         conversations = rows(source, "SELECT * FROM conversations")
         messages = rows(source, "SELECT * FROM messages")
+        workflows = rows(source, "SELECT * FROM workflows") if "workflows" in tables else []
+        reports = rows(source, "SELECT * FROM reports") if "reports" in tables else []
     finally:
         source.close()
 
@@ -65,10 +67,23 @@ def main():
             ((row["id"], row["conversation_id"], row["role"], row["content"],
               row["citations"], row["created_at"]) for row in messages),
         )
+        target.executemany(
+            "INSERT INTO workflows (id, owner_id, kind, goal, document_ids, status, created_at, error) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING",
+            ((row["id"], row["owner_id"], row["kind"], row["goal"], row["document_ids"],
+              "failed" if row["status"] in {"running", "pending"} else row["status"], row["created_at"],
+              "Interrupted by database migration. Retry from checkpoint." if row["status"] in {"running", "pending"} else row["error"])
+             for row in workflows),
+        )
+        target.executemany(
+            "INSERT INTO reports (id, owner_id, content, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (id) DO NOTHING",
+            ((row["id"], row["owner_id"], row["content"], row["created_at"]) for row in reports),
+        )
 
     print(
         f"Migrated {len(documents)} documents, {len(chunks)} chunks, "
-        f"{len(conversations)} conversations, and {len(messages)} messages."
+        f"{len(conversations)} conversations, {len(messages)} messages, "
+        f"{len(workflows)} workflows, and {len(reports)} reports. Keep workflow-checkpoints.sqlite alongside the data."
     )
 
 
