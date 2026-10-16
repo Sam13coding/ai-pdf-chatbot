@@ -20,6 +20,7 @@ import { api } from './api'
 import AuthScreen from './components/AuthScreen'
 import AnswerText from './components/AnswerText'
 import DocumentLibrary from './components/DocumentLibrary'
+import WorkflowPanel from './components/WorkflowPanel'
 
 const suggestions = [
   'Summarize the key points across my documents',
@@ -36,6 +37,7 @@ export default function App() {
   const [messages, setMessages] = useState([])
   const [selected, setSelected] = useState([])
   const [question, setQuestion] = useState('')
+  const [answerMode, setAnswerMode] = useState('documents')
   const [busy, setBusy] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [deletingDocumentId, setDeletingDocumentId] = useState(null)
@@ -43,6 +45,7 @@ export default function App() {
   const [dragging, setDragging] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 700)
   const [libraryOpen, setLibraryOpen] = useState(false)
+  const [workflowOpen, setWorkflowOpen] = useState(false)
   const fileInput = useRef(null)
   const bottom = useRef(null)
 
@@ -97,12 +100,14 @@ export default function App() {
       setConversationId(id)
       setMessages(conversation.messages)
       setLibraryOpen(false)
+      setWorkflowOpen(false)
     } catch (err) {
       setError(err.message)
     }
   }
 
   function newChat() {
+    setWorkflowOpen(false)
     setConversationId(null)
     setMessages([])
     setQuestion('')
@@ -131,6 +136,7 @@ export default function App() {
           question: trimmed,
           conversation_id: conversationId,
           document_ids: selected,
+          answer_mode: answerMode,
         }),
       })
       setConversationId(result.conversation_id)
@@ -217,9 +223,7 @@ export default function App() {
           <div className="brand-mark">
             <BookOpen size={21} strokeWidth={2.1} />
           </div>
-          <span>
-            PAGESUTRA
-          </span>
+          <span>PAGESUTRA</span>
         </div>
         <button className="new-chat" onClick={newChat}>
           <Plus size={17} /> New conversation
@@ -227,10 +231,22 @@ export default function App() {
         <div className="side-section-title">WORKSPACE</div>
         <button
           className={`side-link ${libraryOpen ? 'active' : ''}`}
-          onClick={() => setLibraryOpen(true)}
+          onClick={() => {
+            setLibraryOpen(true)
+            setWorkflowOpen(false)
+          }}
         >
           <FileText size={17} /> My documents{' '}
           <span className="count">{documents.length}</span>
+        </button>
+        <button
+          className={`side-link ${workflowOpen ? 'active' : ''}`}
+          onClick={() => {
+            setWorkflowOpen(true)
+            setLibraryOpen(false)
+          }}
+        >
+          <Sparkles size={17} /> Document workflows
         </button>
         <div className="side-section-title recent-title">RECENT CHATS</div>
         <div className="conversation-list">
@@ -238,7 +254,7 @@ export default function App() {
             conversations.map((chat) => (
               <button
                 key={chat.id}
-                className={`conversation-item ${conversationId === chat.id && !libraryOpen ? 'active' : ''}`}
+                className={`conversation-item ${conversationId === chat.id && !libraryOpen && !workflowOpen ? 'active' : ''}`}
                 onClick={() => openConversation(chat.id)}
               >
                 <MessageCircle size={16} />
@@ -279,11 +295,13 @@ export default function App() {
             <span className="breadcrumb">Workspace</span>
             <span className="slash">/</span>
             <strong>
-              {libraryOpen
-                ? 'My documents'
-                : conversationId
-                  ? 'Conversation'
-                  : 'New conversation'}
+              {workflowOpen
+                ? 'Document workflows'
+                : libraryOpen
+                  ? 'My documents'
+                  : conversationId
+                    ? 'Conversation'
+                    : 'New conversation'}
             </strong>
           </div>
           <div className="topbar-right">
@@ -299,7 +317,9 @@ export default function App() {
           </div>
         )}
 
-        {libraryOpen ? (
+        {workflowOpen ? (
+          <WorkflowPanel documents={documents} selected={selected} />
+        ) : libraryOpen ? (
           <DocumentLibrary
             documents={documents}
             deletingDocumentId={deletingDocumentId}
@@ -487,6 +507,20 @@ export default function App() {
                   rows={1}
                 />
                 <div className="composer-bottom">
+                  <label className="answer-mode">
+                    <span>Answer with</span>
+                    <select
+                      aria-label="Answer knowledge sources"
+                      value={answerMode}
+                      onChange={(event) => setAnswerMode(event.target.value)}
+                      disabled={busy}
+                    >
+                      <option value="documents">PDF evidence only</option>
+                      <option value="background">
+                        PDFs + related background
+                      </option>
+                    </select>
+                  </label>
                   <button
                     className="scope-button"
                     onClick={() => setLibraryOpen(true)}
@@ -506,8 +540,9 @@ export default function App() {
                 </div>
               </div>
               <div className="composer-note">
-                PAGESUTRA can make mistakes. Check the cited pages for important
-                details.
+                {answerMode === 'background'
+                  ? 'Related background comes from model knowledge. PDF citations apply only to the document answer.'
+                  : 'PAGESUTRA can make mistakes. Check the cited pages for important details.'}
               </div>
             </div>
           </>
